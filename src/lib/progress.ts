@@ -11,8 +11,9 @@ import type {
 import { PROGRESS_WEIGHTS, READINESS_WEIGHTS } from "@/config/weights";
 
 /**
- * Calculate the weighted completion score for a single chapter
- * Uses importance_score as weight multiplier
+ * Calculate the weighted completion score for a single chapter.
+ * Weights: Theory=25%, Module=45%, PYQ=20%, Mock=10%
+ * DB note: mock progress is stored in practice_completed column.
  */
 export function calculateChapterCompletion(
   chapter: Chapter,
@@ -24,14 +25,14 @@ export function calculateChapterCompletion(
 
   const theoryScore = progress.theory_completed ? 1 : 0;
   const moduleScore = progress.module_completed ? 1 : 0;
-  const practiceScore = progress.practice_completed ? 1 : 0;
   const pyqScore = progress.pyq_completed ? 1 : 0;
+  const mockScore = progress.practice_completed ? 1 : 0; // practice_completed = mock in UI
 
   const completion =
     theoryScore * PROGRESS_WEIGHTS.theory +
     moduleScore * PROGRESS_WEIGHTS.module +
-    practiceScore * PROGRESS_WEIGHTS.practice +
-    pyqScore * PROGRESS_WEIGHTS.pyq;
+    pyqScore * PROGRESS_WEIGHTS.pyq +
+    mockScore * PROGRESS_WEIGHTS.mock;
 
   const weightedScore = completion * chapter.importance_score;
 
@@ -54,8 +55,8 @@ export function calculateSubjectProgress(
       subject,
       theory_percent: 0,
       module_percent: 0,
-      practice_percent: 0,
       pyq_percent: 0,
+      mock_percent: 0,
       overall_percent: 0,
       weighted_completion: 0,
       total_chapters: 0,
@@ -67,8 +68,8 @@ export function calculateSubjectProgress(
 
   let theoryCount = 0;
   let moduleCount = 0;
-  let practiceCount = 0;
   let pyqCount = 0;
+  let mockCount = 0;
   let completedChapters = 0;
 
   let totalImportanceScore = 0;
@@ -84,8 +85,8 @@ export function calculateSubjectProgress(
     if (progress) {
       if (progress.theory_completed) theoryCount++;
       if (progress.module_completed) moduleCount++;
-      if (progress.practice_completed) practiceCount++;
       if (progress.pyq_completed) pyqCount++;
+      if (progress.practice_completed) mockCount++; // practice_completed = mock
     }
 
     if (completion === 100) completedChapters++;
@@ -101,8 +102,8 @@ export function calculateSubjectProgress(
   const totalChapters = chapters.length;
   const theoryPercent = Math.round((theoryCount / totalChapters) * 100);
   const modulePercent = Math.round((moduleCount / totalChapters) * 100);
-  const practicePercent = Math.round((practiceCount / totalChapters) * 100);
   const pyqPercent = Math.round((pyqCount / totalChapters) * 100);
+  const mockPercent = Math.round((mockCount / totalChapters) * 100);
 
   // Weighted completion: chapters with higher importance_score contribute more
   const weightedCompletion =
@@ -124,20 +125,20 @@ export function calculateSubjectProgress(
     .filter((c) => c.completion_percent > 0)
     .slice(0, 5);
 
-  // Overall percent (simple average of all four metrics)
+  // Overall percent using the defined weights
   const overallPercent = Math.round(
-    (theoryPercent * PROGRESS_WEIGHTS.theory +
-      modulePercent * PROGRESS_WEIGHTS.module +
-      practicePercent * PROGRESS_WEIGHTS.practice +
-      pyqPercent * PROGRESS_WEIGHTS.pyq)
+    theoryPercent * PROGRESS_WEIGHTS.theory +
+    modulePercent * PROGRESS_WEIGHTS.module +
+    pyqPercent * PROGRESS_WEIGHTS.pyq +
+    mockPercent * PROGRESS_WEIGHTS.mock
   );
 
   return {
     subject,
     theory_percent: theoryPercent,
     module_percent: modulePercent,
-    practice_percent: practicePercent,
     pyq_percent: pyqPercent,
+    mock_percent: mockPercent,
     overall_percent: overallPercent,
     weighted_completion: weightedCompletion,
     total_chapters: totalChapters,
@@ -163,11 +164,11 @@ export function calculateOverallProgress(
   const module_percent = Math.round(
     subjects.reduce((sum, s) => sum + s.module_percent, 0) / 3
   );
-  const practice_percent = Math.round(
-    subjects.reduce((sum, s) => sum + s.practice_percent, 0) / 3
-  );
   const pyq_percent = Math.round(
     subjects.reduce((sum, s) => sum + s.pyq_percent, 0) / 3
+  );
+  const mock_percent = Math.round(
+    subjects.reduce((sum, s) => sum + s.mock_percent, 0) / 3
   );
 
   const overall_percent = Math.round(
@@ -178,7 +179,6 @@ export function calculateOverallProgress(
     subjects.reduce((sum, s) => sum + s.weighted_completion, 0) / 3
   );
 
-  // Combine all weakest/strongest chapters from all subjects
   const allChapters = [
     ...physicsProgress.weakest_chapters,
     ...chemistryProgress.weakest_chapters,
@@ -194,8 +194,8 @@ export function calculateOverallProgress(
   return {
     theory_percent,
     module_percent,
-    practice_percent,
     pyq_percent,
+    mock_percent,
     overall_percent,
     weighted_completion,
     physics: physicsProgress,
@@ -224,48 +224,47 @@ export function calculateMockTestStats(tests: MockTest[]): MockTestStats {
   }
 
   const percentages = tests.map((t) =>
-  Math.round((t.score / t.total_marks) * 100)
-);
+    Math.round((t.score / t.total_marks) * 100)
+  );
 
-const bestPercentage = Math.max(...percentages);
+  const bestPercentage = Math.max(...percentages);
 
-const averagePercentage = Math.round(
-  percentages.reduce((sum, p) => sum + p, 0) / tests.length
-);
+  const averagePercentage = Math.round(
+    percentages.reduce((sum, p) => sum + p, 0) / tests.length
+  );
 
-const sorted = [...tests].sort(
-  (a, b) =>
-    new Date(b.test_date).getTime() -
-    new Date(a.test_date).getTime()
-);
+  const sorted = [...tests].sort(
+    (a, b) =>
+      new Date(b.test_date).getTime() -
+      new Date(a.test_date).getTime()
+  );
 
-const recentTest = sorted[0];
+  const recentTest = sorted[0];
 
-const bestTest =
-  tests.find(
-    (t) =>
-      Math.round((t.score / t.total_marks) * 100) === bestPercentage
-  ) || tests[0];
+  const bestTest =
+    tests.find(
+      (t) => Math.round((t.score / t.total_marks) * 100) === bestPercentage
+    ) || tests[0];
 
-return {
-  total_tests: tests.length,
-  best_score: bestTest.score,
-  average_score: Math.round(
-    tests.reduce((sum, t) => sum + t.score, 0) / tests.length
-  ),
-  recent_score: recentTest.score,
-  best_percentage: bestPercentage,
-  average_percentage: averagePercentage,
-  recent_percentage: Math.round(
-    (recentTest.score / recentTest.total_marks) * 100
-  ),
-  recent_tests: sorted.slice(0, 5),
-};
-  
+  return {
+    total_tests: tests.length,
+    best_score: bestTest.score,
+    average_score: Math.round(
+      tests.reduce((sum, t) => sum + t.score, 0) / tests.length
+    ),
+    recent_score: recentTest.score,
+    best_percentage: bestPercentage,
+    average_percentage: averagePercentage,
+    recent_percentage: Math.round(
+      (recentTest.score / recentTest.total_marks) * 100
+    ),
+    recent_tests: sorted.slice(0, 5),
+  };
 }
 
 /**
  * Calculate readiness score (0-100)
+ * Based on weighted chapter completion, PYQ coverage, and mock test performance
  */
 export function calculateReadinessScore(
   progress: OverallProgress,
@@ -273,13 +272,11 @@ export function calculateReadinessScore(
 ): number {
   const weightedCompletionScore = progress.weighted_completion;
   const pyqScore = progress.pyq_percent;
-  const practiceScore = progress.practice_percent;
   const mockScore = mockStats.total_tests > 0 ? mockStats.average_percentage : 0;
 
   const readinessScore = Math.round(
     weightedCompletionScore * READINESS_WEIGHTS.weighted_completion +
     pyqScore * READINESS_WEIGHTS.pyq_completion +
-    practiceScore * READINESS_WEIGHTS.practice_completion +
     mockScore * READINESS_WEIGHTS.mock_test_performance
   );
 

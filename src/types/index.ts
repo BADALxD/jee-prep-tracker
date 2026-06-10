@@ -6,6 +6,14 @@ export type SubjectName = "Physics" | "Chemistry" | "Mathematics";
 export type ChemistrySection = "Physical" | "Inorganic" | "Organic";
 export type ReadinessLevel = "Beginner" | "Intermediate" | "Advanced" | "Exam Ready";
 
+// The 4 progress fields used in UI & calculations
+// Note: DB stores mock progress in the "practice_completed" column
+export type ProgressField =
+  | "theory_completed"
+  | "module_completed"
+  | "pyq_completed"
+  | "mock_completed"; // maps to practice_completed in DB
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -37,28 +45,22 @@ export interface ChapterProgress {
   chapter_id: string;
   theory_completed: boolean;
   module_completed: boolean;
-  practice_completed: boolean;
+  // practice_completed in DB is used as "mock" in the UI
+  practice_completed: boolean; // = mock_completed in UI
   pyq_completed: boolean;
-  // Future-ready fields
-  revision_count: number;
-  last_revision_date: string | null;
-  confidence_score: number | null; // 1-5
-  notes: string | null;
   created_at: string;
   updated_at: string;
-  // Joined data
+  // Joined data (only when fetched with chapter join)
   chapter?: Chapter;
 }
 
 export interface MockTest {
   id: string;
   user_id: string;
-
   subject: string;
   score: number;
   total_marks: number;
   test_date: string;
-
   created_at: string;
 }
 
@@ -73,7 +75,6 @@ export interface Material {
   file_size_bytes: number | null;
   uploaded_by: string;
   is_active: boolean;
-  // Future-ready fields
   chapter_id: string | null;
   tags: string[] | null;
   view_count: number;
@@ -91,11 +92,9 @@ export interface ReadinessScore {
   weighted_practice_score: number;
   mock_test_score: number;
   readiness_level: ReadinessLevel;
-  // Breakdown
   physics_score: number;
   chemistry_score: number;
   mathematics_score: number;
-  // Future-ready fields
   predicted_rank_min: number | null;
   predicted_rank_max: number | null;
   predicted_percentile: number | null;
@@ -109,8 +108,8 @@ export interface SubjectProgress {
   subject: SubjectName;
   theory_percent: number;
   module_percent: number;
-  practice_percent: number;
   pyq_percent: number;
+  mock_percent: number;
   overall_percent: number;
   weighted_completion: number;
   total_chapters: number;
@@ -128,8 +127,8 @@ export interface ChapterWithProgress extends Chapter {
 export interface OverallProgress {
   theory_percent: number;
   module_percent: number;
-  practice_percent: number;
   pyq_percent: number;
+  mock_percent: number;
   overall_percent: number;
   weighted_completion: number;
   physics: SubjectProgress;

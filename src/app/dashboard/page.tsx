@@ -71,6 +71,11 @@ export default async function DashboardPage() {
   const mockStats = calculateMockTestStats(mockTests as MockTest[] || []);
   const readinessScore = calculateReadinessScore(overallProgress, mockStats);
 
+  // Subject completion percentages (using weighted overall_percent)
+  const physicsCompletion = physicsProgress.overall_percent;
+  const chemistryCompletion = chemistryProgress.overall_percent;
+  const mathCompletion = mathProgress.overall_percent;
+
   return (
     <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-6 max-w-7xl mx-auto">
       {/* Welcome header */}
@@ -144,7 +149,35 @@ export default async function DashboardPage() {
           <SubjectCard progress={chemistryProgress} />
           <SubjectCard progress={mathProgress} />
 
-          {/* Overall breakdown */}
+          {/* Subject completion summary */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle>Subject Completion</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[
+                  { label: "Physics", value: physicsCompletion, color: "bg-indigo-500", href: "/subjects/physics" },
+                  { label: "Chemistry", value: chemistryCompletion, color: "bg-emerald-500", href: "/subjects/chemistry" },
+                  { label: "Mathematics", value: mathCompletion, color: "bg-amber-500", href: "/subjects/mathematics" },
+                ].map((item) => (
+                  <Link key={item.label} href={item.href} className="flex items-center gap-3 group">
+                    <span className="w-24 text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">{item.label}</span>
+                    <ProgressBar
+                      value={item.value}
+                      barClassName={item.color}
+                      className="flex-1"
+                    />
+                    <span className="w-9 text-right text-xs font-semibold text-zinc-300">
+                      {item.value}%
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preparation breakdown by component */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle>Preparation Breakdown</CardTitle>
@@ -152,13 +185,14 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="space-y-3">
                 {[
-                  { label: "Theory", value: overallProgress.theory_percent, color: "bg-blue-500" },
-                  { label: "Module Work", value: overallProgress.module_percent, color: "bg-violet-500" },
-                  { label: "Practice Questions", value: overallProgress.practice_percent, color: "bg-amber-500" },
-                  { label: "Previous Year Questions", value: overallProgress.pyq_percent, color: "bg-emerald-500" },
+                  { label: "Theory", value: overallProgress.theory_percent, color: "bg-blue-500", weight: "25%" },
+                  { label: "Module", value: overallProgress.module_percent, color: "bg-violet-500", weight: "45%" },
+                  { label: "PYQ", value: overallProgress.pyq_percent, color: "bg-amber-500", weight: "20%" },
+                  { label: "Mock", value: overallProgress.mock_percent, color: "bg-emerald-500", weight: "10%" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <span className="w-36 text-xs text-zinc-400">{item.label}</span>
+                    <span className="w-16 text-xs text-zinc-400">{item.label}</span>
+                    <span className="w-8 text-[10px] text-zinc-600">{item.weight}</span>
                     <ProgressBar
                       value={item.value}
                       barClassName={item.color}
@@ -187,9 +221,9 @@ export default async function DashboardPage() {
             <CardContent>
               <ReadinessMeter
                 score={readinessScore}
-                physicsScore={physicsProgress.overall_percent}
-                chemistryScore={chemistryProgress.overall_percent}
-                mathScore={mathProgress.overall_percent}
+                physicsScore={physicsCompletion}
+                chemistryScore={chemistryCompletion}
+                mathScore={mathCompletion}
               />
             </CardContent>
           </Card>
@@ -200,12 +234,12 @@ export default async function DashboardPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  <CardTitle>Needs Attention</CardTitle>
+                  <CardTitle>Weak Chapters</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {overallProgress.weakest_chapters.slice(0, 4).map((ch) => (
+                  {overallProgress.weakest_chapters.slice(0, 5).map((ch) => (
                     <div key={ch.id} className="flex items-center gap-2">
                       <Badge variant="secondary" className="text-[10px] flex-shrink-0">
                         {ch.subject.slice(0, 3)}
@@ -258,10 +292,10 @@ export default async function DashboardPage() {
                           className={cn(
                             "text-xs font-bold",
                             ((test.score / test.total_marks) * 100) >= 70
-  ? "text-emerald-400"
-  : ((test.score / test.total_marks) * 100) >= 50
-  ? "text-amber-400"
-  : "text-red-400"
+                              ? "text-emerald-400"
+                              : ((test.score / test.total_marks) * 100) >= 50
+                              ? "text-amber-400"
+                              : "text-red-400"
                           )}
                         >
                           {Math.round((test.score / test.total_marks) * 100)}%

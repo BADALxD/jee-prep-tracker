@@ -43,37 +43,15 @@ export function useProgress(userId: string | undefined) {
         progressMap.set(p.chapter_id, p);
       });
 
-      const physicsChapters = (chapters || []).filter(
-        (c: Chapter) => c.subject === "Physics"
-      );
-      const chemistryChapters = (chapters || []).filter(
-        (c: Chapter) => c.subject === "Chemistry"
-      );
-      const mathChapters = (chapters || []).filter(
-        (c: Chapter) => c.subject === "Mathematics"
-      );
+      const physicsChapters = (chapters || []).filter((c: Chapter) => c.subject === "Physics");
+      const chemistryChapters = (chapters || []).filter((c: Chapter) => c.subject === "Chemistry");
+      const mathChapters = (chapters || []).filter((c: Chapter) => c.subject === "Mathematics");
 
-      const physicsProgress = calculateSubjectProgress(
-        "Physics",
-        physicsChapters,
-        progressMap
-      );
-      const chemistryProgress = calculateSubjectProgress(
-        "Chemistry",
-        chemistryChapters,
-        progressMap
-      );
-      const mathProgress = calculateSubjectProgress(
-        "Mathematics",
-        mathChapters,
-        progressMap
-      );
+      const physicsProgress = calculateSubjectProgress("Physics", physicsChapters, progressMap);
+      const chemistryProgress = calculateSubjectProgress("Chemistry", chemistryChapters, progressMap);
+      const mathProgress = calculateSubjectProgress("Mathematics", mathChapters, progressMap);
 
-      const overallProgress = calculateOverallProgress(
-        physicsProgress,
-        chemistryProgress,
-        mathProgress
-      );
+      const overallProgress = calculateOverallProgress(physicsProgress, chemistryProgress, mathProgress);
 
       setProgress(overallProgress);
       setIsLoading(false);
@@ -122,21 +100,26 @@ export function useSubjectChapters(subject: SubjectName, userId: string | undefi
 
   useEffect(() => {
     fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subject, userId]);
 
+  /**
+   * Update a progress field. "mock_completed" maps to "practice_completed" in DB.
+   */
   async function updateProgress(
     chapterId: string,
-    field: "theory_completed" | "module_completed" | "practice_completed" | "pyq_completed",
+    field: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed",
     value: boolean
   ) {
     if (!userId) return;
 
+    const dbField = field === "mock_completed" ? "practice_completed" : field;
     const existing = progressMap.get(chapterId);
 
     if (existing) {
       const { data, error } = await supabase
         .from("chapter_progress")
-        .update({ [field]: value, updated_at: new Date().toISOString() })
+        .update({ [dbField]: value, updated_at: new Date().toISOString() })
         .eq("id", existing.id)
         .select()
         .single();
@@ -152,7 +135,7 @@ export function useSubjectChapters(subject: SubjectName, userId: string | undefi
         .insert({
           user_id: userId,
           chapter_id: chapterId,
-          [field]: value,
+          [dbField]: value,
         })
         .select()
         .single();

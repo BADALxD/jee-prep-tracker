@@ -11,10 +11,10 @@ export function SubjectProgressHeader({ progress }: SubjectProgressHeaderProps) 
   const colors = SUBJECT_COLORS[progress.subject];
 
   const metrics = [
-    { label: "Theory", value: progress.theory_percent, icon: "📖" },
-    { label: "Module", value: progress.module_percent, icon: "📝" },
-    { label: "Practice", value: progress.practice_percent, icon: "✏️" },
-    { label: "PYQ", value: progress.pyq_percent, icon: "📄" },
+    { label: "Theory", value: progress.theory_percent, icon: "📖", weight: "25%" },
+    { label: "Module", value: progress.module_percent, icon: "📝", weight: "45%" },
+    { label: "PYQ", value: progress.pyq_percent, icon: "📄", weight: "20%" },
+    { label: "Mock", value: progress.mock_percent, icon: "🎯", weight: "10%" },
   ];
 
   return (
@@ -53,7 +53,8 @@ export function SubjectProgressHeader({ progress }: SubjectProgressHeaderProps) 
               <span className="text-xs text-zinc-500">{metric.label}</span>
               <span className="text-sm">{metric.icon}</span>
             </div>
-            <p className="text-lg font-bold text-zinc-100 mb-1">{metric.value}%</p>
+            <p className="text-lg font-bold text-zinc-100 mb-0.5">{metric.value}%</p>
+            <p className="text-[10px] text-zinc-600 mb-1">{metric.weight} weight</p>
             <ProgressBar
               value={metric.value}
               size="sm"

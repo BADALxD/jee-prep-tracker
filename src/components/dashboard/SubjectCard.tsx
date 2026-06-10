@@ -31,8 +31,8 @@ export function SubjectCard({ progress }: SubjectCardProps) {
   const metrics = [
     { label: "Theory", value: progress.theory_percent },
     { label: "Module", value: progress.module_percent },
-    { label: "Practice", value: progress.practice_percent },
     { label: "PYQ", value: progress.pyq_percent },
+    { label: "Mock", value: progress.mock_percent },
   ];
 
   return (

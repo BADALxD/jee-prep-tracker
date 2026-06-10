@@ -1,19 +1,18 @@
 // Progress calculation weights configuration
-// Modify these values to adjust the scoring algorithm
+// Theory=25%, Module=45%, PYQ=20%, Mock=10%
 
 export const PROGRESS_WEIGHTS = {
-  theory: 0.25,     // 25%
-  module: 0.25,     // 25%
-  practice: 0.30,   // 30%
-  pyq: 0.20,        // 20%
+  theory: 0.25,   // 25%
+  module: 0.45,   // 45%
+  pyq: 0.20,      // 20%
+  mock: 0.10,     // 10%
 } as const;
 
 // Readiness score weights
 export const READINESS_WEIGHTS = {
-  weighted_completion: 0.35,  // 35% - weighted chapter completion
-  pyq_completion: 0.25,       // 25% - PYQ completion (exam-specific)
-  practice_completion: 0.20,  // 20% - question practice
-  mock_test_performance: 0.20, // 20% - mock test scores
+  weighted_completion: 0.40,  // 40% - weighted chapter completion
+  pyq_completion: 0.30,       // 30% - PYQ completion (exam-specific)
+  mock_test_performance: 0.30, // 30% - mock test scores
 } as const;
 
 // Readiness levels
