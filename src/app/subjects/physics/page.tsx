@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateSubjectProgress } from "@/lib/progress";
 import { SubjectProgressHeader } from "@/components/subjects/SubjectProgressHeader";
 import { SubjectChapterList } from "@/components/subjects/SubjectChapterList";
-import type { Chapter, ChapterProgress } from "@/types";
+import type { Chapter, ChapterProgress, ChapterRevision } from "@/types";
 
 export const metadata = { title: "Physics — JEE Tracker" };
 
@@ -12,9 +12,10 @@ export default async function PhysicsPage() {
   const { data: { user: authUser } } = await supabase.auth.getUser();
   if (!authUser) redirect("/auth/login");
 
-  const [{ data: chapters }, { data: progressData }] = await Promise.all([
+  const [{ data: chapters }, { data: progressData }, { data: revisionsData }] = await Promise.all([
     supabase.from("chapters").select("*").eq("subject", "Physics").order("chapter_number"),
     supabase.from("chapter_progress").select("*").eq("user_id", authUser.id),
+    supabase.from("chapter_revisions").select("*").eq("user_id", authUser.id),
   ]);
 
   const progressMap = new Map<string, ChapterProgress>();
@@ -29,6 +30,7 @@ export default async function PhysicsPage() {
         subject="Physics"
         chapters={chapters || []}
         initialProgressData={progressData || []}
+        initialRevisionsData={(revisionsData || []) as ChapterRevision[]}
         userId={authUser.id}
       />
     </div>

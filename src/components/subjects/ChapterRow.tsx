@@ -3,18 +3,21 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/Progress";
-import type { Chapter, ChapterProgress } from "@/types";
+import type { Chapter, ChapterProgress, ChapterRevision, RevisionStatus } from "@/types";
 import { PROGRESS_WEIGHTS } from "@/config/weights";
+import { getRevisionStatus } from "@/lib/revisions";
 import { Check } from "lucide-react";
 
 interface ChapterRowProps {
   chapter: Chapter;
   progress: ChapterProgress | null;
+  revisions: ChapterRevision[];
   onUpdate: (
     chapterId: string,
     field: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed",
     value: boolean
   ) => void;
+  onRevisionUpdate: (chapterId: string, revisionId: string, completed: boolean) => void;
 }
 
 const DIFFICULTY_LABELS: Record<number, { label: string; class: string }> = {
@@ -75,9 +78,47 @@ function ProgressToggle({ label, weight, checked, color, onChange }: ProgressTog
   );
 }
 
-export function ChapterRow({ chapter, progress, onUpdate }: ChapterRowProps) {
+const REVISION_STATUS_CLASSES: Record<RevisionStatus, string> = {
+  Completed: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
+  "Due Today": "bg-yellow-500/20 border-yellow-500/40 text-yellow-300",
+  Overdue: "bg-red-500/20 border-red-500/40 text-red-300",
+  Upcoming: "bg-zinc-800/60 border-zinc-700/60 text-zinc-400",
+};
+
+/**
+ * Compact colored badge for a single revision (R1/R2/R3).
+ * Color encodes status: Completed -> green, Due Today -> yellow,
+ * Overdue -> red, Upcoming -> gray.
+ * Clicking toggles completed state (reversible).
+ */
+function RevisionBadge({
+  revision,
+  onToggle,
+}: {
+  revision: ChapterRevision;
+  onToggle: () => void;
+}) {
+  const status = getRevisionStatus(revision);
+
+  return (
+    <button
+      onClick={onToggle}
+      title={`Revision ${revision.revision_number} — due ${revision.due_date} — ${status}`}
+      className={cn(
+        "inline-flex items-center justify-center h-6 min-w-[2rem] px-1.5 rounded-md border text-[10px] font-semibold transition-all duration-150 select-none",
+        REVISION_STATUS_CLASSES[status]
+      )}
+    >
+      R{revision.revision_number}
+    </button>
+  );
+}
+
+export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionUpdate }: ChapterRowProps) {
   const completion = getCompletionPercent(progress);
   const difficulty = DIFFICULTY_LABELS[chapter.difficulty_weight] || DIFFICULTY_LABELS[3];
+
+  const sortedRevisions = [...revisions].sort((a, b) => a.revision_number - b.revision_number);
 
   const fields: Array<{
     key: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed";
@@ -144,6 +185,20 @@ export function ChapterRow({ chapter, progress, onUpdate }: ChapterRowProps) {
             </Badge>
             {chapter.importance_score >= 12 && (
               <Badge variant="default">High Priority</Badge>
+            )}
+
+            {/* Revision badges (R1/R2/R3) — shown whenever revision rows exist,
+                even if chapter is later unchecked (history persists). */}
+            {sortedRevisions.length > 0 && (
+              <div className="flex items-center gap-1 ml-1">
+                {sortedRevisions.map((rev) => (
+                  <RevisionBadge
+                    key={rev.id}
+                    revision={rev}
+                    onToggle={() => onRevisionUpdate(chapter.id, rev.id, !rev.completed)}
+                  />
+                ))}
+              </div>
             )}
           </div>
 

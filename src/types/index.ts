@@ -101,7 +101,20 @@ export interface ReadinessScore {
   calculated_at: string;
   created_at: string;
 }
+// ─── Revision Tracking ────────────────────────────────────────────────
 
+export type RevisionStatus = "Upcoming" | "Due Today" | "Overdue" | "Completed";
+
+export interface ChapterRevision {
+  id: string;
+  user_id: string;
+  chapter_id: string;
+  revision_number: 1 | 2 | 3;
+  due_date: string;
+  completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+}
 // Computed/derived types
 
 export interface SubjectProgress {

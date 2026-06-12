@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChapterRow } from "@/components/subjects/ChapterRow";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
-import type { Chapter, ChapterProgress, SubjectName, ChemistrySection } from "@/types";
+import type { Chapter, ChapterProgress, ChapterRevision, SubjectName, ChemistrySection } from "@/types";
+import { isFullyCompleted, ensureRevisionsExist, needsBackfill } from "@/lib/revisions";
 
 interface SubjectChapterListProps {
   subject: SubjectName;
   chapters: Chapter[];
   initialProgressData: ChapterProgress[];
+  initialRevisionsData: ChapterRevision[];
   userId: string;
   showSections?: boolean;
 }
@@ -58,12 +60,24 @@ function makeOptimisticRow(
 export function SubjectChapterList({
   chapters,
   initialProgressData,
+  initialRevisionsData,
   userId,
   showSections = false,
 }: SubjectChapterListProps) {
   const [progressMap, setProgressMap] = useState<Map<string, ChapterProgress>>(() => {
     const m = new Map<string, ChapterProgress>();
     initialProgressData.forEach((p) => m.set(p.chapter_id, p));
+    return m;
+  });
+
+  // ── Revisions state: chapterId -> revision rows ──
+  const [revisionsMap, setRevisionsMap] = useState<Map<string, ChapterRevision[]>>(() => {
+    const m = new Map<string, ChapterRevision[]>();
+    initialRevisionsData.forEach((r) => {
+      const list = m.get(r.chapter_id) ?? [];
+      list.push(r);
+      m.set(r.chapter_id, list);
+    });
     return m;
   });
 
@@ -75,6 +89,39 @@ export function SubjectChapterList({
   const pendingInserts = useRef<Map<string, Promise<ChapterProgress | null>>>(new Map());
 
   const supabase = createClient();
+
+  // ── Backfill: on first mount, generate revisions for chapters that were
+  // already fully completed before this feature shipped and have no
+  // revision rows yet. Best-effort — failures are silent (non-blocking). ──
+  useEffect(() => {
+    const backfillTargets = chapters.filter((chapter) => {
+      const progress = progressMap.get(chapter.id) ?? null;
+      const existing = revisionsMap.get(chapter.id);
+      return needsBackfill(progress, existing);
+    });
+
+    if (backfillTargets.length === 0) return;
+
+    (async () => {
+      for (const chapter of backfillTargets) {
+        const created = await ensureRevisionsExist(
+          supabase,
+          userId,
+          chapter.id,
+          revisionsMap.get(chapter.id)
+        );
+        if (created.length > 0) {
+          setRevisionsMap((prev) => {
+            const next = new Map(prev);
+            next.set(chapter.id, created);
+            return next;
+          });
+        }
+      }
+    })();
+    // Intentionally run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function updateProgress(chapterId: string, field: UIField, value: boolean) {
     const dbField = toDbField(field);
@@ -116,8 +163,13 @@ export function SubjectChapterList({
             return null;
           }
           // Replace temp row with real DB row
-          setProgressMap((prev) => new Map(prev).set(chapterId, data as ChapterProgress));
-          return data as ChapterProgress;
+          const realRow = data as ChapterProgress;
+          setProgressMap((prev) => new Map(prev).set(chapterId, realRow));
+
+          // ── Revision creation check (insert path) ──
+          maybeCreateRevisions(chapterId, realRow);
+
+          return realRow;
         });
 
       pendingInserts.current.set(chapterId, insertPromise);
@@ -141,6 +193,75 @@ export function SubjectChapterList({
       toast.error("Failed to save progress");
       // Revert to the pre-click state
       setProgressMap((prev) => new Map(prev).set(chapterId, existing));
+      return;
+    }
+
+    // ── Revision creation check (update path) ──
+    maybeCreateRevisions(chapterId, updated);
+  }
+
+  /**
+   * If the merged progress row is now fully completed AND no revision rows
+   * exist yet for this chapter, create them (anchored to "now").
+   * No-op if revisions already exist (revision history persists even after
+   * later unchecking the chapter).
+   * Best-effort: failures here do not affect progress state / UI.
+   */
+  function maybeCreateRevisions(chapterId: string, mergedProgress: ChapterProgress) {
+    if (!isFullyCompleted(mergedProgress)) return;
+
+    const existingRevisions = revisionsMap.get(chapterId);
+    if (existingRevisions && existingRevisions.length > 0) return;
+
+    (async () => {
+      const created = await ensureRevisionsExist(supabase, userId, chapterId, existingRevisions);
+      if (created.length > 0) {
+        setRevisionsMap((prev) => {
+          const next = new Map(prev);
+          next.set(chapterId, created);
+          return next;
+        });
+      }
+    })();
+  }
+
+  /**
+   * Marks a single revision as complete/incomplete. Reversible.
+   * Optimistic update with rollback on failure.
+   */
+  async function updateRevision(chapterId: string, revisionId: string, completed: boolean) {
+    const currentList = revisionsMap.get(chapterId) ?? [];
+    const previousList = currentList;
+
+    const optimisticList = currentList.map((r) =>
+      r.id === revisionId
+        ? { ...r, completed, completed_at: completed ? new Date().toISOString() : null }
+        : r
+    );
+
+    setRevisionsMap((prev) => {
+      const next = new Map(prev);
+      next.set(chapterId, optimisticList);
+      return next;
+    });
+
+    const { error } = await supabase
+      .from("chapter_revisions")
+      .update({
+        completed,
+        completed_at: completed ? new Date().toISOString() : null,
+      })
+      .eq("id", revisionId)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("chapter_revisions update error:", error);
+      toast.error("Failed to update revision");
+      setRevisionsMap((prev) => {
+        const next = new Map(prev);
+        next.set(chapterId, previousList);
+        return next;
+      });
     }
   }
 
@@ -152,7 +273,9 @@ export function SubjectChapterList({
             key={chapter.id}
             chapter={chapter}
             progress={progressMap.get(chapter.id) ?? null}
+            revisions={revisionsMap.get(chapter.id) ?? []}
             onUpdate={updateProgress}
+            onRevisionUpdate={updateRevision}
           />
         ))}
       </div>
@@ -200,7 +323,9 @@ export function SubjectChapterList({
                   key={chapter.id}
                   chapter={chapter}
                   progress={progressMap.get(chapter.id) ?? null}
+                  revisions={revisionsMap.get(chapter.id) ?? []}
                   onUpdate={updateProgress}
+                  onRevisionUpdate={updateRevision}
                 />
               ))}
             </div>
