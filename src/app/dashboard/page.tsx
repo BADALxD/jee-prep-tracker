@@ -6,9 +6,11 @@ import {
   calculateMockTestStats,
   calculateReadinessScore,
 } from "@/lib/progress";
+import { getRevisionStatus, toDateOnlyString } from "@/lib/revisions";
 import { ReadinessMeter } from "@/components/dashboard/ReadinessMeter";
 import { SubjectCard } from "@/components/dashboard/SubjectCard";
 import { StatsCard } from "@/components/dashboard/StatsCard";
+import { RevisionsCard, type RevisionDisplayItem } from "@/components/dashboard/RevisionsCard";
 import { ProgressBar } from "@/components/ui/Progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -24,7 +26,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import type { Chapter, ChapterProgress, MockTest, UserProfile } from "@/types";
+import type { Chapter, ChapterProgress, ChapterRevision, MockTest, UserProfile } from "@/types";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -39,6 +41,7 @@ export default async function DashboardPage() {
     { data: chapters },
     { data: progressData },
     { data: mockTests },
+    { data: revisionsData },
   ] = await Promise.all([
     supabase.from("user_profiles").select("*").eq("id", authUser.id).single(),
     supabase.from("chapters").select("*").order("chapter_number"),
@@ -48,6 +51,7 @@ export default async function DashboardPage() {
       .select("*")
       .eq("user_id", authUser.id)
       .order("test_date", { ascending: false }),
+    supabase.from("chapter_revisions").select("*").eq("user_id", authUser.id),
   ]);
 
   if (!profile) redirect("/auth/login");
@@ -75,6 +79,40 @@ export default async function DashboardPage() {
   const physicsCompletion = physicsProgress.overall_percent;
   const chemistryCompletion = chemistryProgress.overall_percent;
   const mathCompletion = mathProgress.overall_percent;
+
+  // Build chapter lookup for revision display (subject + name + chapter_number)
+  const chapterLookup = new Map<string, Chapter>();
+  (chapters || []).forEach((c: Chapter) => chapterLookup.set(c.id, c));
+
+  // Determine overdue / due-today revisions, sorted by due_date then chapter order
+  const today = toDateOnlyString(new Date());
+  const dueOrOverdue = ((revisionsData || []) as ChapterRevision[])
+    .map((rev) => {
+      const status = getRevisionStatus(rev);
+      const chapter = chapterLookup.get(rev.chapter_id);
+      return { rev, status, chapter };
+    })
+    .filter(
+      (entry): entry is { rev: ChapterRevision; status: "Overdue" | "Due Today"; chapter: Chapter | undefined } =>
+        (entry.status === "Overdue" || entry.status === "Due Today") && entry.chapter !== undefined
+    )
+    .sort((a, b) => {
+      if (a.rev.due_date !== b.rev.due_date) return a.rev.due_date < b.rev.due_date ? -1 : 1;
+      const an = a.chapter?.chapter_number ?? 0;
+      const bn = b.chapter?.chapter_number ?? 0;
+      return an - bn;
+    });
+
+  const overdueCount = dueOrOverdue.filter((e) => e.status === "Overdue").length;
+  const dueTodayCount = dueOrOverdue.filter((e) => e.status === "Due Today").length;
+
+  const revisionItems: RevisionDisplayItem[] = dueOrOverdue.map((e) => ({
+    id: e.rev.id,
+    subject: e.chapter!.subject,
+    chapterName: e.chapter!.name,
+    revisionNumber: e.rev.revision_number,
+    status: e.status,
+  }));
 
   return (
     <div className="px-4 py-6 lg:px-8 lg:py-8 space-y-6 max-w-7xl mx-auto">
@@ -210,6 +248,13 @@ export default async function DashboardPage() {
 
         {/* Right column: Readiness + weak/strong */}
         <div className="space-y-4">
+          {/* Revisions */}
+          <RevisionsCard
+            items={revisionItems}
+            overdueCount={overdueCount}
+            dueTodayCount={dueTodayCount}
+          />
+
           {/* Readiness meter */}
           <Card>
             <CardHeader className="pb-3">

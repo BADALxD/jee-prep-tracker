@@ -86,9 +86,42 @@ export async function ensureRevisionsExist(
   return (data ?? []) as ChapterRevision[];
 }
 
+/**
+ * Theory is the gatekeeper for revisions.
+ * Backfill is needed whenever theory is completed but no revision rows exist yet —
+ * regardless of whether Module/PYQ/Mock are done.
+ * (Previously gated on isFullyCompleted; updated to theory-only gate.)
+ */
 export function needsBackfill(
   progress: ChapterProgress | null | undefined,
   existingRevisions: ChapterRevision[] | undefined
 ): boolean {
-  return isFullyCompleted(progress) && (!existingRevisions || existingRevisions.length === 0);
+  return (
+    Boolean(progress?.theory_completed) &&
+    (!existingRevisions || existingRevisions.length === 0)
+  );
+}
+
+/**
+ * Deletes all chapter_revisions rows for a given chapter belonging to the user.
+ * Called when theory is unchecked — revisions must not exist without theory.
+ * Requires a DELETE RLS policy on chapter_revisions (auth.uid() = user_id).
+ * Returns true on success, false on error.
+ */
+export async function deleteRevisions(
+  supabase: SupabaseClient,
+  userId: string,
+  chapterId: string
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("chapter_revisions")
+    .delete()
+    .eq("chapter_id", chapterId)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("chapter_revisions delete error:", error);
+    return false;
+  }
+  return true;
 }

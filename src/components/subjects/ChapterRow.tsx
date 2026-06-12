@@ -49,15 +49,24 @@ interface ProgressToggleProps {
   checked: boolean;
   color: string;
   onChange: () => void;
+  /**
+   * When true the button is rendered but non-interactive.
+   * Used for Module/PYQ/Mock when Theory is not yet checked.
+   */
+  disabled?: boolean;
 }
 
-function ProgressToggle({ label, weight, checked, color, onChange }: ProgressToggleProps) {
+function ProgressToggle({ label, weight, checked, color, onChange, disabled = false }: ProgressToggleProps) {
   return (
     <button
-      onClick={onChange}
+      onClick={disabled ? undefined : onChange}
+      disabled={disabled}
+      title={disabled ? "Complete Theory first" : undefined}
       className={cn(
         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-200 select-none",
-        checked
+        disabled
+          ? "opacity-35 cursor-not-allowed bg-zinc-900/40 border-zinc-800/60 text-zinc-600"
+          : checked
           ? `${color} border-transparent shadow-sm`
           : "bg-zinc-900/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
       )}
@@ -65,13 +74,17 @@ function ProgressToggle({ label, weight, checked, color, onChange }: ProgressTog
       <span
         className={cn(
           "flex h-3.5 w-3.5 items-center justify-center rounded-full border flex-shrink-0 transition-colors",
-          checked ? "border-current bg-current/20" : "border-current/40"
+          disabled
+            ? "border-zinc-700/40"
+            : checked
+            ? "border-current bg-current/20"
+            : "border-current/40"
         )}
       >
-        {checked && <Check className="h-2 w-2" strokeWidth={3} />}
+        {checked && !disabled && <Check className="h-2 w-2" strokeWidth={3} />}
       </span>
       <span>{label}</span>
-      <span className={cn("opacity-60 text-[10px]", checked ? "" : "text-zinc-600")}>
+      <span className={cn("opacity-60 text-[10px]", checked && !disabled ? "" : "text-zinc-600")}>
         {weight}
       </span>
     </button>
@@ -120,12 +133,16 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
 
   const sortedRevisions = [...revisions].sort((a, b) => a.revision_number - b.revision_number);
 
+  // Theory must be true before Module/PYQ/Mock become interactive.
+  const theoryChecked = progress?.theory_completed ?? false;
+
   const fields: Array<{
     key: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed";
     label: string;
     weight: string;
     checkedValue: boolean;
     color: string;
+    disabled: boolean;
   }> = [
     {
       key: "theory_completed",
@@ -133,6 +150,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
       weight: "25%",
       checkedValue: progress?.theory_completed ?? false,
       color: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300",
+      disabled: false, // Theory is always interactive
     },
     {
       key: "module_completed",
@@ -140,6 +158,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
       weight: "45%",
       checkedValue: progress?.module_completed ?? false,
       color: "bg-violet-500/20 border-violet-500/40 text-violet-300",
+      disabled: !theoryChecked,
     },
     {
       key: "pyq_completed",
@@ -147,6 +166,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
       weight: "20%",
       checkedValue: progress?.pyq_completed ?? false,
       color: "bg-amber-500/20 border-amber-500/40 text-amber-300",
+      disabled: !theoryChecked,
     },
     {
       key: "mock_completed",
@@ -155,6 +175,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
       // mock_completed maps to practice_completed in DB
       checkedValue: progress?.practice_completed ?? false,
       color: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
+      disabled: !theoryChecked,
     },
   ];
 
@@ -247,6 +268,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
             weight={field.weight}
             checked={field.checkedValue}
             color={field.color}
+            disabled={field.disabled}
             // Read the current value from `field.checkedValue` at call time (it
             // is re-derived from `progress` on every render, so it is always fresh).
             onChange={() => onUpdate(chapter.id, field.key, !field.checkedValue)}
