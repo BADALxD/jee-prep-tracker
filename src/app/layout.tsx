@@ -6,13 +6,30 @@ const geistSans = { variable: "--font-geist-sans" };
 const geistMono = { variable: "--font-geist-mono" };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://jee-prep-tracker-woad.vercel.app"),
+
   title: {
     default: "JEE Tracker — Your Path to IIT",
     template: "%s | JEE Tracker",
   },
+
   description:
-    "Track your JEE preparation progress, analyze readiness, and ace the exam with structured study management.",
-  keywords: ["JEE", "IIT", "JEE Main", "JEE Advanced", "Study Tracker", "Exam Preparation"],
+    "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
+
+  keywords: [
+    "JEE",
+    "JEE Main",
+    "JEE Advanced",
+    "IIT",
+    "Study Tracker",
+    "JEE Tracker",
+    "Exam Preparation",
+    "JEE Progress Tracker",
+  ],
+
+  verification: {
+    google: "BEa0x_Xu-H8XlbQlS_zT0hlXdrF9NMEKlnbC112qwWA",
+  },
 };
 
 export default function RootLayout({
