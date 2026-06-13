@@ -5,7 +5,11 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/Progress";
 import type { Chapter, ChapterProgress, ChapterRevision, RevisionStatus } from "@/types";
 import { PROGRESS_WEIGHTS } from "@/config/weights";
-import { getRevisionStatus, canCompleteRevision } from "@/lib/revisions";
+import {
+  getRevisionStatus,
+  canCompleteRevision,
+  formatDueDate,
+} from "@/lib/revisions";
 import { Check, Lock } from "lucide-react";
 
 interface ChapterRowProps {
@@ -132,8 +136,8 @@ function RevisionBadge({
         revision.completed
           ? `Revision ${revision.revision_number} — completed`
           : isLocked
-          ? `Revision ${revision.revision_number} — locked until ${revision.due_date}`
-          : `Revision ${revision.revision_number} — due ${revision.due_date} — ${status} — click to complete`
+          ? `Revision ${revision.revision_number} — locked until ${formatDueDate(revision.due_date)}`
+          : `Revision ${revision.revision_number} — due ${formatDueDate(revision.due_date)} — ${status} — click to complete`
       }
       className={cn(
         "inline-flex items-center justify-center gap-0.5 h-6 min-w-[2rem] px-1.5 rounded-md border text-[10px] font-semibold transition-all duration-150 select-none",

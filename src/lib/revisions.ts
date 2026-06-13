@@ -161,3 +161,7 @@ export function getCascadeCompletionIds(
     )
     .map((r) => r.id);
 }
+export function formatDueDate(dueDate: string): string {
+  const [year, month, day] = dueDate.split("-");
+  return `${day}/${month}/${year}`;
+}
