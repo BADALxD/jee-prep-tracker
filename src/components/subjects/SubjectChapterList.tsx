@@ -94,6 +94,7 @@ export function SubjectChapterList({
    */
   const pendingInserts = useRef<Map<string, Promise<ChapterProgress | null>>>(new Map());
   const [pendingTheoryUncheck, setPendingTheoryUncheck] = useState<{ chapterId: string } | null>(null);
+  const [pendingRevisionComplete, setPendingRevisionComplete] = useState<{ chapterId: string; revisionId: string } | null>(null);
 
   const supabase = createClient();
 
@@ -199,11 +200,11 @@ export function SubjectChapterList({
 
     // ── UPDATE path (real row exists, id is a genuine UUID) ──
 
-    // // ── Theory true -> false: ask for confirmation before running the reset ──
-if (dbField === "theory_completed" && value === false && existing.theory_completed === true) {
-  setPendingTheoryUncheck({ chapterId });
-  return;
-}
+    // ── Theory true -> false: ask for confirmation before running the reset ──
+    if (dbField === "theory_completed" && value === false && existing.theory_completed === true) {
+      setPendingTheoryUncheck({ chapterId });
+      return;
+    }
 
     // ── Standard UPDATE path (single field toggle) ──
     const updated: ChapterProgress = { ...existing, [dbField]: value };
@@ -229,7 +230,8 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
       maybeCreateRevisions(chapterId);
     }
   }
-/**
+
+  /**
    * Runs the actual Theory true -> false reset: clears Module/PYQ/Mock,
    * persists the reset, and deletes all revisions for the chapter.
    * Extracted so it can be triggered only after explicit user confirmation.
@@ -293,7 +295,7 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
     }
   }
 
-  /** Dialog handlers */
+  /** Theory-uncheck dialog handlers */
   function cancelTheoryUncheck() {
     setPendingTheoryUncheck(null);
   }
@@ -304,6 +306,7 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
     setPendingTheoryUncheck(null);
     await executeTheoryUncheck(chapterId);
   }
+
   /**
    * Creates revision rows for a chapter if none exist yet.
    * Triggered the moment Theory becomes true (insert or update path).
@@ -326,13 +329,31 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
   }
 
   /**
+   * Validates that a revision can be completed, then opens the confirmation
+   * dialog. No state changes / DB calls happen here — those are deferred to
+   * executeCompleteRevision, which only runs after explicit confirmation.
+   */
+  function requestCompleteRevision(chapterId: string, revisionId: string) {
+    const currentList = revisionsMap.get(chapterId) ?? [];
+    const target = currentList.find((r) => r.id === revisionId);
+
+    if (!target) return;
+    if (target.completed) return; // permanent — no-op
+    if (!canCompleteRevision(target)) {
+      toast.error("This revision isn't due yet");
+      return;
+    }
+
+    setPendingRevisionComplete({ chapterId, revisionId });
+  }
+
+  /**
    * Marks a revision (and any earlier incomplete revisions) as completed.
    * Permanent — completed revisions can never be uncompleted, and there is
-   * no forward cascade. Locked revisions (due_date in the future) cannot be
-   * completed at all.
+   * no forward cascade. Logic unchanged from the previous inline implementation.
    * Optimistic update with rollback on failure.
    */
-  async function completeRevision(chapterId: string, revisionId: string) {
+  async function executeCompleteRevision(chapterId: string, revisionId: string) {
     const currentList = revisionsMap.get(chapterId) ?? [];
     const target = currentList.find((r) => r.id === revisionId);
 
@@ -382,6 +403,18 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
     }
   }
 
+  /** Revision-complete dialog handlers */
+  function cancelRevisionComplete() {
+    setPendingRevisionComplete(null);
+  }
+
+  async function confirmRevisionComplete() {
+    if (!pendingRevisionComplete) return;
+    const { chapterId, revisionId } = pendingRevisionComplete;
+    setPendingRevisionComplete(null);
+    await executeCompleteRevision(chapterId, revisionId);
+  }
+
   if (!showSections) {
     return (
       <>
@@ -393,12 +426,15 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
               progress={progressMap.get(chapter.id) ?? null}
               revisions={revisionsMap.get(chapter.id) ?? []}
               onUpdate={updateProgress}
-              onRevisionComplete={completeRevision}
+              onRevisionComplete={requestCompleteRevision}
             />
           ))}
         </div>
         {pendingTheoryUncheck && (
           <TheoryUncheckDialog onCancel={cancelTheoryUncheck} onConfirm={confirmTheoryUncheck} />
+        )}
+        {pendingRevisionComplete && (
+          <RevisionCompleteDialog onCancel={cancelRevisionComplete} onConfirm={confirmRevisionComplete} />
         )}
       </>
     );
@@ -406,7 +442,7 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
 
   // Chemistry: grouped by section
   return (
-  <>
+    <>
     <div className="space-y-8">
       {SECTIONS.map((section) => {
         const sectionChapters = chapters.filter((c) => c.chemistry_section === section);
@@ -448,7 +484,7 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
                   progress={progressMap.get(chapter.id) ?? null}
                   revisions={revisionsMap.get(chapter.id) ?? []}
                   onUpdate={updateProgress}
-                  onRevisionComplete={completeRevision}
+                  onRevisionComplete={requestCompleteRevision}
                 />
               ))}
             </div>
@@ -464,9 +500,17 @@ if (dbField === "theory_completed" && value === false && existing.theory_complet
   />
 )}
 
+{pendingRevisionComplete && (
+  <RevisionCompleteDialog
+    onCancel={cancelRevisionComplete}
+    onConfirm={confirmRevisionComplete}
+  />
+)}
+
 </>
 );
 }
+
 function TheoryUncheckDialog({
   onCancel,
   onConfirm,
@@ -501,6 +545,37 @@ function TheoryUncheckDialog({
             className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20 transition-colors"
           >
             Remove Theory
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RevisionCompleteDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl">
+        <h2 className="text-sm font-semibold text-zinc-100">Complete Revision?</h2>
+        <p className="mt-2 text-xs text-zinc-400">Did you complete this revision?</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+          >
+            No
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+          >
+            Yes, Completed
           </button>
         </div>
       </div>
