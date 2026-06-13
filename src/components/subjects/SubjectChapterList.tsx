@@ -93,6 +93,7 @@ export function SubjectChapterList({
    * Key: chapterId  Value: Promise that resolves to the real DB row (or null on error)
    */
   const pendingInserts = useRef<Map<string, Promise<ChapterProgress | null>>>(new Map());
+  const [pendingTheoryUncheck, setPendingTheoryUncheck] = useState<{ chapterId: string } | null>(null);
 
   const supabase = createClient();
 
@@ -198,63 +199,11 @@ export function SubjectChapterList({
 
     // ── UPDATE path (real row exists, id is a genuine UUID) ──
 
-    // ── Theory true -> false: cascade-uncheck Module/PYQ/Mock and delete revisions ──
-    if (dbField === "theory_completed" && value === false && existing.theory_completed === true) {
-      const previous = existing;
-      const updated: ChapterProgress = {
-        ...existing,
-        theory_completed: false,
-        module_completed: false,
-        pyq_completed: false,
-        practice_completed: false,
-      };
-      setProgressMap((prev) => new Map(prev).set(chapterId, updated));
-
-      // Optimistically clear revisions for this chapter
-      const previousRevisions = revisionsMap.get(chapterId) ?? [];
-      setRevisionsMap((prev) => {
-        const next = new Map(prev);
-        next.delete(chapterId);
-        return next;
-      });
-
-      const { error } = await supabase
-        .from("chapter_progress")
-        .update({
-          theory_completed: false,
-          module_completed: false,
-          pyq_completed: false,
-          practice_completed: false,
-        })
-        .eq("id", existing.id)
-        .eq("user_id", userId);
-
-      if (error) {
-        console.error("chapter_progress update error:", error);
-        toast.error("Failed to save progress");
-        setProgressMap((prev) => new Map(prev).set(chapterId, previous));
-        setRevisionsMap((prev) => {
-          const next = new Map(prev);
-          next.set(chapterId, previousRevisions);
-          return next;
-        });
-        return;
-      }
-
-      const deleted = await deleteRevisions(supabase, userId, chapterId);
-      if (!deleted) {
-        toast.error("Failed to clear revisions");
-        // Progress update succeeded but revision delete failed — restore
-        // revisions in local state so the UI stays consistent with DB.
-        setRevisionsMap((prev) => {
-          const next = new Map(prev);
-          next.set(chapterId, previousRevisions);
-          return next;
-        });
-      }
-
-      return;
-    }
+    // // ── Theory true -> false: ask for confirmation before running the reset ──
+if (dbField === "theory_completed" && value === false && existing.theory_completed === true) {
+  setPendingTheoryUncheck({ chapterId });
+  return;
+}
 
     // ── Standard UPDATE path (single field toggle) ──
     const updated: ChapterProgress = { ...existing, [dbField]: value };
@@ -280,7 +229,81 @@ export function SubjectChapterList({
       maybeCreateRevisions(chapterId);
     }
   }
+/**
+   * Runs the actual Theory true -> false reset: clears Module/PYQ/Mock,
+   * persists the reset, and deletes all revisions for the chapter.
+   * Extracted so it can be triggered only after explicit user confirmation.
+   * Logic is unchanged from the previous inline implementation.
+   */
+  async function executeTheoryUncheck(chapterId: string) {
+    const existing = progressMap.get(chapterId);
+    if (!existing || existing.id.startsWith("__temp__")) return;
 
+    const previous = existing;
+    const updated: ChapterProgress = {
+      ...existing,
+      theory_completed: false,
+      module_completed: false,
+      pyq_completed: false,
+      practice_completed: false,
+    };
+    setProgressMap((prev) => new Map(prev).set(chapterId, updated));
+
+    // Optimistically clear revisions for this chapter
+    const previousRevisions = revisionsMap.get(chapterId) ?? [];
+    setRevisionsMap((prev) => {
+      const next = new Map(prev);
+      next.delete(chapterId);
+      return next;
+    });
+
+    const { error } = await supabase
+      .from("chapter_progress")
+      .update({
+        theory_completed: false,
+        module_completed: false,
+        pyq_completed: false,
+        practice_completed: false,
+      })
+      .eq("id", existing.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("chapter_progress update error:", error);
+      toast.error("Failed to save progress");
+      setProgressMap((prev) => new Map(prev).set(chapterId, previous));
+      setRevisionsMap((prev) => {
+        const next = new Map(prev);
+        next.set(chapterId, previousRevisions);
+        return next;
+      });
+      return;
+    }
+
+    const deleted = await deleteRevisions(supabase, userId, chapterId);
+    if (!deleted) {
+      toast.error("Failed to clear revisions");
+      // Progress update succeeded but revision delete failed — restore
+      // revisions in local state so the UI stays consistent with DB.
+      setRevisionsMap((prev) => {
+        const next = new Map(prev);
+        next.set(chapterId, previousRevisions);
+        return next;
+      });
+    }
+  }
+
+  /** Dialog handlers */
+  function cancelTheoryUncheck() {
+    setPendingTheoryUncheck(null);
+  }
+
+  async function confirmTheoryUncheck() {
+    if (!pendingTheoryUncheck) return;
+    const { chapterId } = pendingTheoryUncheck;
+    setPendingTheoryUncheck(null);
+    await executeTheoryUncheck(chapterId);
+  }
   /**
    * Creates revision rows for a chapter if none exist yet.
    * Triggered the moment Theory becomes true (insert or update path).
@@ -361,23 +384,29 @@ export function SubjectChapterList({
 
   if (!showSections) {
     return (
-      <div className="space-y-2">
-        {chapters.map((chapter) => (
-          <ChapterRow
-            key={chapter.id}
-            chapter={chapter}
-            progress={progressMap.get(chapter.id) ?? null}
-            revisions={revisionsMap.get(chapter.id) ?? []}
-            onUpdate={updateProgress}
-            onRevisionComplete={completeRevision}
-          />
-        ))}
-      </div>
+      <>
+        <div className="space-y-2">
+          {chapters.map((chapter) => (
+            <ChapterRow
+              key={chapter.id}
+              chapter={chapter}
+              progress={progressMap.get(chapter.id) ?? null}
+              revisions={revisionsMap.get(chapter.id) ?? []}
+              onUpdate={updateProgress}
+              onRevisionComplete={completeRevision}
+            />
+          ))}
+        </div>
+        {pendingTheoryUncheck && (
+          <TheoryUncheckDialog onCancel={cancelTheoryUncheck} onConfirm={confirmTheoryUncheck} />
+        )}
+      </>
     );
   }
 
   // Chemistry: grouped by section
   return (
+  <>
     <div className="space-y-8">
       {SECTIONS.map((section) => {
         const sectionChapters = chapters.filter((c) => c.chemistry_section === section);
@@ -426,6 +455,55 @@ export function SubjectChapterList({
           </div>
         );
       })}
+    </div>
+
+{pendingTheoryUncheck && (
+  <TheoryUncheckDialog
+    onCancel={cancelTheoryUncheck}
+    onConfirm={confirmTheoryUncheck}
+  />
+)}
+
+</>
+);
+}
+function TheoryUncheckDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl">
+        <h2 className="text-sm font-semibold text-zinc-100">Remove Theory Completion?</h2>
+        <p className="mt-2 text-xs text-zinc-400">
+          This chapter will be reset. The following data will be removed:
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-zinc-400 list-disc list-inside">
+          <li>Module progress</li>
+          <li>PYQ progress</li>
+          <li>Mock progress</li>
+          <li>All revision reminders (R1-R4)</li>
+          <li>Revision completion history</li>
+        </ul>
+        <p className="mt-2 text-xs font-medium text-red-400">This action cannot be undone.</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20 transition-colors"
+          >
+            Remove Theory
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
