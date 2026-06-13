@@ -109,7 +109,7 @@ export interface ChapterRevision {
   id: string;
   user_id: string;
   chapter_id: string;
-  revision_number: 1 | 2 | 3;
+  revision_number: 1 | 2 | 3 | 4;
   due_date: string;
   completed: boolean;
   completed_at: string | null;

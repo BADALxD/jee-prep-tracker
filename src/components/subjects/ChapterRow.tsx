@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/Progress";
 import type { Chapter, ChapterProgress, ChapterRevision, RevisionStatus } from "@/types";
 import { PROGRESS_WEIGHTS } from "@/config/weights";
-import { getRevisionStatus } from "@/lib/revisions";
-import { Check } from "lucide-react";
+import { getRevisionStatus, canCompleteRevision } from "@/lib/revisions";
+import { Check, Lock } from "lucide-react";
 
 interface ChapterRowProps {
   chapter: Chapter;
@@ -17,7 +17,7 @@ interface ChapterRowProps {
     field: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed",
     value: boolean
   ) => void;
-  onRevisionUpdate: (chapterId: string, revisionId: string, completed: boolean) => void;
+  onRevisionComplete: (chapterId: string, revisionId: string) => void;
 }
 
 const DIFFICULTY_LABELS: Record<number, { label: string; class: string }> = {
@@ -99,35 +99,59 @@ const REVISION_STATUS_CLASSES: Record<RevisionStatus, string> = {
 };
 
 /**
- * Compact colored badge for a single revision (R1/R2/R3).
- * Color encodes status: Completed -> green, Due Today -> yellow,
- * Overdue -> red, Upcoming -> gray.
- * Clicking toggles completed state (reversible).
+ * Compact colored badge for a single revision (R1-R4).
+ *
+ * Behavior:
+ * - Completed -> green, permanent, click does nothing (not a toggle).
+ * - Due Today / Overdue (not completed) -> yellow/red, clickable to complete.
+ *   Completing may cascade-complete earlier revisions.
+ * - Upcoming (not completed, due_date in future) -> gray + lock icon,
+ *   click does nothing (locked until due date arrives).
  */
 function RevisionBadge({
   revision,
-  onToggle,
+  onComplete,
 }: {
   revision: ChapterRevision;
-  onToggle: () => void;
+  onComplete: () => void;
 }) {
   const status = getRevisionStatus(revision);
+  const completable = canCompleteRevision(revision);
+  const isLocked = !revision.completed && !completable;
+
+  const handleClick = () => {
+    if (revision.completed) return; // permanent — no reverse toggle
+    if (!completable) return; // locked — due date not yet reached
+    onComplete();
+  };
 
   return (
     <button
-      onClick={onToggle}
-      title={`Revision ${revision.revision_number} — due ${revision.due_date} — ${status}`}
+      onClick={handleClick}
+      title={
+        revision.completed
+          ? `Revision ${revision.revision_number} — completed`
+          : isLocked
+          ? `Revision ${revision.revision_number} — locked until ${revision.due_date}`
+          : `Revision ${revision.revision_number} — due ${revision.due_date} — ${status} — click to complete`
+      }
       className={cn(
-        "inline-flex items-center justify-center h-6 min-w-[2rem] px-1.5 rounded-md border text-[10px] font-semibold transition-all duration-150 select-none",
-        REVISION_STATUS_CLASSES[status]
+        "inline-flex items-center justify-center gap-0.5 h-6 min-w-[2rem] px-1.5 rounded-md border text-[10px] font-semibold transition-all duration-150 select-none",
+        REVISION_STATUS_CLASSES[status],
+        revision.completed
+          ? "cursor-default"
+          : isLocked
+          ? "cursor-not-allowed opacity-70"
+          : "cursor-pointer hover:brightness-110"
       )}
     >
+      {isLocked && <Lock className="h-2.5 w-2.5" strokeWidth={3} />}
       R{revision.revision_number}
     </button>
   );
 }
 
-export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionUpdate }: ChapterRowProps) {
+export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionComplete }: ChapterRowProps) {
   const completion = getCompletionPercent(progress);
   const difficulty = DIFFICULTY_LABELS[chapter.difficulty_weight] || DIFFICULTY_LABELS[3];
 
@@ -208,7 +232,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
               <Badge variant="default">High Priority</Badge>
             )}
 
-            {/* Revision badges (R1/R2/R3) — shown whenever revision rows exist,
+            {/* Revision badges (R1-R4) — shown whenever revision rows exist,
                 even if chapter is later unchecked (history persists). */}
             {sortedRevisions.length > 0 && (
               <div className="flex items-center gap-1 ml-1">
@@ -216,7 +240,7 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionU
                   <RevisionBadge
                     key={rev.id}
                     revision={rev}
-                    onToggle={() => onRevisionUpdate(chapter.id, rev.id, !rev.completed)}
+                    onComplete={() => onRevisionComplete(chapter.id, rev.id)}
                   />
                 ))}
               </div>

@@ -1,21 +1,12 @@
 import type { ChapterProgress, ChapterRevision, RevisionStatus } from "@/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export const REVISION_OFFSETS_DAYS: Record<1 | 2 | 3, number> = {
+export const REVISION_OFFSETS_DAYS: Record<1 | 2 | 3 | 4, number> = {
   1: 1,
   2: 7,
   3: 30,
+  4: 90,
 };
-
-export function isFullyCompleted(progress: Partial<ChapterProgress> | null | undefined): boolean {
-  if (!progress) return false;
-  return Boolean(
-    progress.theory_completed &&
-      progress.module_completed &&
-      progress.pyq_completed &&
-      progress.practice_completed
-  );
-}
 
 export function toDateOnlyString(date: Date): string {
   const year = date.getFullYear();
@@ -31,11 +22,11 @@ export function buildRevisionRows(
 ): Array<{
   user_id: string;
   chapter_id: string;
-  revision_number: 1 | 2 | 3;
+  revision_number: 1 | 2 | 3 | 4;
   due_date: string;
   completed: boolean;
 }> {
-  return ([1, 2, 3] as const).map((revisionNumber) => {
+  return ([1, 2, 3, 4] as const).map((revisionNumber) => {
     const due = new Date(baseDate);
     due.setDate(due.getDate() + REVISION_OFFSETS_DAYS[revisionNumber]);
     return {
@@ -56,6 +47,20 @@ export function getRevisionStatus(revision: ChapterRevision): RevisionStatus {
   if (revision.due_date === today) return "Due Today";
   if (revision.due_date < today) return "Overdue";
   return "Upcoming";
+}
+
+/**
+ * A revision can be completed only once its due date has arrived
+ * (due_date <= today). "Upcoming" revisions are locked.
+ * Already-completed revisions are NOT "completable" again — this function
+ * answers "is it allowed to transition to completed right now", which is
+ * false once it's already completed (permanence is enforced by the caller
+ * treating completed as a terminal state, not by this function).
+ */
+export function canCompleteRevision(revision: ChapterRevision): boolean {
+  if (revision.completed) return false;
+  const today = toDateOnlyString(new Date());
+  return revision.due_date <= today;
 }
 
 export async function ensureRevisionsExist(
@@ -90,7 +95,6 @@ export async function ensureRevisionsExist(
  * Theory is the gatekeeper for revisions.
  * Backfill is needed whenever theory is completed but no revision rows exist yet —
  * regardless of whether Module/PYQ/Mock are done.
- * (Previously gated on isFullyCompleted; updated to theory-only gate.)
  */
 export function needsBackfill(
   progress: ChapterProgress | null | undefined,
@@ -124,4 +128,36 @@ export async function deleteRevisions(
     return false;
   }
   return true;
+}
+
+/**
+ * Given the full set of revisions for a chapter and the revision being
+ * completed (target), returns the list of revision IDs that must be marked
+ * completed as part of this action:
+ *  - the target itself
+ *  - all revisions with revision_number < target.revision_number that are
+ *    currently NOT completed (cascade backward only — no forward cascade,
+ *    no dependency locks on the target itself beyond its own due date).
+ *
+ * Already-completed revisions (including the target, if somehow already
+ * completed) are excluded — their completed_at must not be overwritten.
+ *
+ * Returns an empty array if the target is not completable
+ * (use canCompleteRevision to check that before calling this).
+ */
+export function getCascadeCompletionIds(
+  revisions: ChapterRevision[],
+  targetRevisionId: string
+): string[] {
+  const target = revisions.find((r) => r.id === targetRevisionId);
+  if (!target) return [];
+  if (!canCompleteRevision(target)) return [];
+
+  return revisions
+    .filter(
+      (r) =>
+        !r.completed &&
+        (r.id === targetRevisionId || r.revision_number < target.revision_number)
+    )
+    .map((r) => r.id);
 }

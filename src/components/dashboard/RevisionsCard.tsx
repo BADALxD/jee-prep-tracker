@@ -7,7 +7,7 @@ export interface RevisionDisplayItem {
   id: string;
   subject: string;
   chapterName: string;
-  revisionNumber: 1 | 2 | 3;
+  revisionNumber: 1 | 2 | 3 | 4;
   status: "Overdue" | "Due Today";
 }
 
