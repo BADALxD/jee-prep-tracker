@@ -19,12 +19,27 @@ export const metadata: Metadata = {
     "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
 
   openGraph: {
-    title: "JEE Tracker",
-    description:
-      "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
-    siteName: "JEE Tracker",
-    type: "website",
-  },
+  title: "JEE Tracker",
+  description:
+    "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
+  siteName: "JEE Tracker",
+  type: "website",
+  images: [
+    {
+      url: "/og-image.png",
+      width: 1024,
+      height: 1024,
+      alt: "JEE Tracker",
+    },
+  ],
+},
+twitter: {
+  card: "summary_large_image",
+  title: "JEE Tracker",
+  description:
+    "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
+  images: ["/og-image.png"],
+},
 
   keywords: [
     "JEE",
