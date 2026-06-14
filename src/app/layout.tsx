@@ -8,6 +8,8 @@ const geistMono = { variable: "--font-geist-mono" };
 export const metadata: Metadata = {
   metadataBase: new URL("https://jee-prep-tracker-woad.vercel.app"),
 
+  applicationName: "JEE Tracker",
+
   title: {
     default: "JEE Tracker — Your Path to IIT",
     template: "%s | JEE Tracker",
@@ -15,6 +17,14 @@ export const metadata: Metadata = {
 
   description:
     "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
+
+  openGraph: {
+    title: "JEE Tracker",
+    description:
+      "Free JEE Main and JEE Advanced preparation tracker with chapter progress tracking, revision planning, readiness analysis, and performance insights.",
+    siteName: "JEE Tracker",
+    type: "website",
+  },
 
   keywords: [
     "JEE",
