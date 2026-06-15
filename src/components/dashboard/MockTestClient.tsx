@@ -26,12 +26,14 @@ export function MockTestClient({ initialTests, userId }: MockTestClientProps) {
   const [showForm, setShowForm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({
-    test_name: "",
-    test_date: new Date().toISOString().split("T")[0],
-    marks_obtained: "",
-    maximum_marks: "300",
-  });
-
+  test_name: "",
+  test_type: "full",
+  subject_name: "",
+  selected_chapters: [] as string[],
+  test_date: new Date().toISOString().split("T")[0],
+  marks_obtained: "",
+  maximum_marks: "300",
+});
   const supabase = createClient();
   const stats = calculateMockTestStats(tests);
 
@@ -54,20 +56,35 @@ export function MockTestClient({ initialTests, userId }: MockTestClientProps) {
   score: obtained,
   total_marks: maximum,
   test_date: form.test_date,
+  test_type: form.test_type,
+  selected_chapters:
+    form.test_type === "chapters"
+      ? form.selected_chapters
+      : null,
 })
       .select()
       .single();
 
     if (error) {
-      toast.error("Failed to save test");
-    } else {
-      toast.success("Test recorded!");
-      setTests([data as MockTest, ...tests]);
-      setShowForm(false);
-      setForm({ test_name: "", test_date: new Date().toISOString().split("T")[0], marks_obtained: "", maximum_marks: "300" });
-    }
-    setIsLoading(false);
-  }
+  toast.error("Failed to save test");
+} else {
+  toast.success("Test recorded!");
+  setTests([data as MockTest, ...tests]);
+  setShowForm(false);
+
+  setForm({
+    test_name: "",
+    test_type: "full",
+    subject_name: "",
+    selected_chapters: [] as string[],
+    test_date: new Date().toISOString().split("T")[0],
+    marks_obtained: "",
+    maximum_marks: "300",
+  });
+}
+
+setIsLoading(false);
+}
 
   async function handleDelete(id: string) {
     const { error } = await supabase.from("mock_tests").delete().eq("id", id);
@@ -111,9 +128,64 @@ marks: t.score,
           <CardContent>
             <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="sm:col-span-2 lg:col-span-2">
+                <div>
+  <label className="block text-sm font-medium mb-2">
+    Test Type
+  </label>
+
+  <select
+    value={form.test_type}
+    onChange={(e) =>
+      setForm({
+        ...form,
+        test_type: e.target.value as "full" | "subject" | "chapters",
+      })
+    }
+    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
+  >
+    <option value="full">Full Syllabus</option>
+    <option value="subject">Specific Subject</option>
+    <option value="chapters">Specific Chapters</option>
+  </select>
+</div>
+{(form.test_type === "subject" || form.test_type === "chapters") && (
+  <div>
+    <label className="block text-sm font-medium mb-2">
+      Subject
+    </label>
+
+    <select
+      value={form.subject_name}
+      onChange={(e) =>
+        setForm({
+          ...form,
+          subject_name: e.target.value,
+        })
+      }
+      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
+    >
+      <option value="">Select Subject</option>
+      <option value="Physics">Physics</option>
+      <option value="Chemistry">Chemistry</option>
+      <option value="Mathematics">Mathematics</option>
+    </select>
+  </div>
+)}
                 <Input
-                  label="Test Name"
-                  placeholder="JEE Main Mock #1"
+                  label={
+  form.test_type === "full"
+    ? "Mock Name"
+    : form.test_type === "subject"
+    ? "Subject Name"
+    : "Chapter Test Name"
+}
+placeholder={
+  form.test_type === "full"
+    ? "JEE Main Mock #1"
+    : form.test_type === "subject"
+    ? "Physics Test #1"
+    : "NLM + WPE Test"
+}
                   value={form.test_name}
                   onChange={(e) => setForm({ ...form, test_name: e.target.value })}
                   required

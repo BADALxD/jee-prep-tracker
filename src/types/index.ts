@@ -64,6 +64,8 @@ export interface MockTest {
   total_marks: number;
   test_date: string;
   created_at: string;
+   test_type: "full" | "subject" | "chapters";
+  selected_chapters: string[] | null;
 }
 
 export interface Material {
