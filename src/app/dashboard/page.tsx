@@ -63,6 +63,7 @@ export default async function DashboardPage() {
   (progressData || []).forEach((p: ChapterProgress) => {
     progressMap.set(p.chapter_id, p);
   });
+  console.log("PROGRESS DATA", progressData);
 
   const physicsChapters = (chapters || []).filter((c: Chapter) => c.subject === "Physics");
   const chemistryChapters = (chapters || []).filter((c: Chapter) => c.subject === "Chemistry");

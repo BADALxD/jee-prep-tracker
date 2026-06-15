@@ -45,12 +45,14 @@ export interface ChapterProgress {
   chapter_id: string;
   theory_completed: boolean;
   module_completed: boolean;
-  // practice_completed in DB is used as "mock" in the UI
-  practice_completed: boolean; // = mock_completed in UI
+  practice_completed: boolean;
   pyq_completed: boolean;
+
+  last_revision_date: string | null;
+
   created_at: string;
   updated_at: string;
-  // Joined data (only when fetched with chapter join)
+
   chapter?: Chapter;
 }
 

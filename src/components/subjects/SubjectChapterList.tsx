@@ -333,6 +333,58 @@ export function SubjectChapterList({
    * dialog. No state changes / DB calls happen here — those are deferred to
    * executeCompleteRevision, which only runs after explicit confirmation.
    */
+  async function requestManualRevision(chapterId: string) {
+  const today = new Date().toISOString().split("T")[0];
+  
+
+  const { error } = await supabase
+    .from("chapter_progress")
+    .update({
+      last_revision_date: today,
+    })
+    .eq("chapter_id", chapterId)
+    .eq("user_id", userId);
+    
+
+
+setProgressMap((prev) => {
+  const next = new Map(prev);
+
+  const existing = next.get(chapterId);
+
+  if (existing) {
+    next.set(chapterId, {
+      ...existing,
+      last_revision_date: today,
+    });
+  }
+
+  return next;
+});
+
+  if (error) {
+    console.error(error);
+    toast.error("Failed to save revision");
+    return;
+  }
+
+  setProgressMap((prev) => {
+    const next = new Map(prev);
+
+    const existing = next.get(chapterId);
+
+    if (existing) {
+      next.set(chapterId, {
+        ...existing,
+        last_revision_date: today,
+      });
+    }
+
+    return next;
+  });
+
+  toast.success("Revision recorded");
+}
   function requestCompleteRevision(chapterId: string, revisionId: string) {
     const currentList = revisionsMap.get(chapterId) ?? [];
     const target = currentList.find((r) => r.id === revisionId);
@@ -427,6 +479,7 @@ export function SubjectChapterList({
               revisions={revisionsMap.get(chapter.id) ?? []}
               onUpdate={updateProgress}
               onRevisionComplete={requestCompleteRevision}
+              onManualRevision={requestManualRevision}
             />
           ))}
         </div>
@@ -485,6 +538,8 @@ export function SubjectChapterList({
                   revisions={revisionsMap.get(chapter.id) ?? []}
                   onUpdate={updateProgress}
                   onRevisionComplete={requestCompleteRevision}
+                  onManualRevision={requestManualRevision}
+                  
                 />
               ))}
             </div>

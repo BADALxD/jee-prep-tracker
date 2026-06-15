@@ -22,6 +22,7 @@ interface ChapterRowProps {
     value: boolean
   ) => void;
   onRevisionComplete: (chapterId: string, revisionId: string) => void;
+  onManualRevision: (chapterId: string) => void;
 }
 
 const DIFFICULTY_LABELS: Record<number, { label: string; class: string }> = {
@@ -155,7 +156,7 @@ function RevisionBadge({
   );
 }
 
-export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionComplete }: ChapterRowProps) {
+export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionComplete, onManualRevision,}: ChapterRowProps) {
   const completion = getCompletionPercent(progress);
   const difficulty = DIFFICULTY_LABELS[chapter.difficulty_weight] || DIFFICULTY_LABELS[3];
 
@@ -163,6 +164,8 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionC
 
   // Theory must be true before Module/PYQ/Mock become interactive.
   const theoryChecked = progress?.theory_completed ?? false;
+  const lastRevisionDate = progress?.last_revision_date;
+  
 
   const fields: Array<{
     key: "theory_completed" | "module_completed" | "pyq_completed" | "mock_completed";
@@ -247,6 +250,18 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionC
                     onComplete={() => onRevisionComplete(chapter.id, rev.id)}
                   />
                 ))}
+                <button
+  onClick={() => onManualRevision(chapter.id)}
+  title="Mark that you've revised this chapter today"
+  className="inline-flex items-center justify-center h-6 min-w-[2rem] px-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-[10px] font-semibold hover:bg-cyan-500/20 transition-all"
+>
+  ↻
+  {lastRevisionDate && (
+  <span className="text-[10px] text-zinc-500 ml-1">
+    Last revised: {new Date(lastRevisionDate).toLocaleDateString("en-IN")}
+  </span>
+)}
+</button>
               </div>
             )}
           </div>
