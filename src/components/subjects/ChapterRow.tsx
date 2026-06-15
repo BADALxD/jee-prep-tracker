@@ -256,12 +256,13 @@ export function ChapterRow({ chapter, progress, revisions, onUpdate, onRevisionC
   className="inline-flex items-center justify-center h-6 min-w-[2rem] px-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-[10px] font-semibold hover:bg-cyan-500/20 transition-all"
 >
   ↻
-  {lastRevisionDate && (
-  <span className="text-[10px] text-zinc-500 ml-1">
+</button>
+
+{lastRevisionDate && (
+  <span className="text-[10px] text-zinc-500">
     Last revised: {new Date(lastRevisionDate).toLocaleDateString("en-IN")}
   </span>
 )}
-</button>
               </div>
             )}
           </div>
