@@ -7,6 +7,7 @@ import type {
   MockTestStats,
   MockTest,
   SubjectName,
+  ChapterRevision,
 } from "@/types";
 import { PROGRESS_WEIGHTS, READINESS_WEIGHTS } from "@/config/weights";
 
@@ -220,6 +221,9 @@ export function calculateMockTestStats(tests: MockTest[]): MockTestStats {
       average_percentage: 0,
       recent_percentage: 0,
       recent_tests: [],
+      full_mock_count: 0,
+last5_full_mock_average: 0,
+confidence: "None",
     };
   }
 
@@ -245,6 +249,36 @@ export function calculateMockTestStats(tests: MockTest[]): MockTestStats {
     tests.find(
       (t) => Math.round((t.score / t.total_marks) * 100) === bestPercentage
     ) || tests[0];
+    const fullMocks = tests.filter(
+  (t) => t.test_type === "full"
+);
+
+const last5FullMocks = [...fullMocks]
+  .sort(
+    (a, b) =>
+      new Date(b.test_date).getTime() -
+      new Date(a.test_date).getTime()
+  )
+  .slice(0, 5);
+
+const last5FullMockAverage =
+  last5FullMocks.length === 0
+    ? 0
+    : Math.round(
+        last5FullMocks.reduce(
+          (sum, t) => sum + t.score,
+          0
+        ) / last5FullMocks.length
+      );
+
+const confidence =
+  fullMocks.length === 0
+    ? "None"
+    : fullMocks.length < 3
+    ? "Low"
+    : fullMocks.length < 5
+    ? "Medium"
+    : "High";
 
   return {
     total_tests: tests.length,
@@ -259,6 +293,9 @@ export function calculateMockTestStats(tests: MockTest[]): MockTestStats {
       (recentTest.score / recentTest.total_marks) * 100
     ),
     recent_tests: sorted.slice(0, 5),
+    full_mock_count: fullMocks.length,
+last5_full_mock_average: last5FullMockAverage,
+confidence,
   };
 }
 
@@ -281,6 +318,72 @@ export function calculateReadinessScore(
   );
 
   return Math.min(100, Math.max(0, readinessScore));
+}
+export function calculateRevisionHealth(
+  chapters: Chapter[],
+  revisions: ChapterRevision[],
+  progressMap: Map<string, ChapterProgress>
+): number {
+  if (chapters.length === 0) return 0;
+
+  const today = new Date();
+
+  const chapterScores = chapters.map((chapter) => {
+    const completedRevisions = revisions
+  .filter(
+    (r) =>
+      r.chapter_id === chapter.id &&
+      r.completed &&
+      r.completed_at
+  )
+  .sort(
+    (a, b) =>
+      new Date(b.completed_at!).getTime() -
+      new Date(a.completed_at!).getTime()
+  );
+
+const progress = progressMap.get(chapter.id);
+
+const manualRevisionDate = progress?.last_revision_date
+  ? new Date(progress.last_revision_date)
+  : null;
+
+const revisionCompletedDate =
+  completedRevisions.length > 0
+    ? new Date(completedRevisions[0].completed_at!)
+    : null;
+
+const lastRevisionDate =
+  manualRevisionDate && revisionCompletedDate
+    ? manualRevisionDate > revisionCompletedDate
+      ? manualRevisionDate
+      : revisionCompletedDate
+    : manualRevisionDate || revisionCompletedDate;
+
+if (!lastRevisionDate) {
+  return 0;
+}
+
+    const daysSinceRevision = Math.floor(
+      (today.getTime() - lastRevisionDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+
+    if (daysSinceRevision <= 7) return 100;
+    if (daysSinceRevision <= 14) return 90;
+    if (daysSinceRevision <= 30) return 75;
+    if (daysSinceRevision <= 60) return 50;
+    if (daysSinceRevision <= 90) return 25;
+
+    return 0;
+  });
+
+  return Math.round(
+  chapterScores.reduce(
+    (sum: number, score: number) => sum + score,
+    0
+  ) / chapterScores.length
+);
 }
 
 /**

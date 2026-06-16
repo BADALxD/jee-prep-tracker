@@ -164,6 +164,10 @@ export interface MockTestStats {
   average_percentage: number;
   recent_percentage: number;
   recent_tests: MockTest[];
+
+full_mock_count: number;
+last5_full_mock_average: number;
+confidence: "None" | "Low" | "Medium" | "High";
 }
 
 export interface DashboardData {

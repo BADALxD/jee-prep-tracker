@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+
 import {
   calculateSubjectProgress,
   calculateOverallProgress,
   calculateMockTestStats,
-  calculateReadinessScore,
+  calculateRevisionHealth,
 } from "@/lib/progress";
 import { getRevisionStatus, toDateOnlyString } from "@/lib/revisions";
 import { ReadinessMeter } from "@/components/dashboard/ReadinessMeter";
@@ -74,7 +75,11 @@ export default async function DashboardPage() {
   const mathProgress = calculateSubjectProgress("Mathematics", mathChapters, progressMap);
   const overallProgress = calculateOverallProgress(physicsProgress, chemistryProgress, mathProgress);
   const mockStats = calculateMockTestStats(mockTests as MockTest[] || []);
-  const readinessScore = calculateReadinessScore(overallProgress, mockStats);
+  const revisionHealth = calculateRevisionHealth(
+  chapters as Chapter[],
+  (revisionsData || []) as ChapterRevision[],
+  progressMap
+);
 
   // Subject completion percentages (using weighted overall_percent)
   const physicsCompletion = physicsProgress.overall_percent;
@@ -149,9 +154,9 @@ export default async function DashboardPage() {
           iconBg="bg-indigo-500/10"
         />
         <StatsCard
-          title="Readiness Score"
-          value={readinessScore}
-          subtitle="Out of 100"
+  title="Revision Health"
+  value={revisionHealth}
+          subtitle="Revision freshness"
           icon={<TrendingUp className="h-5 w-5 text-emerald-400" />}
           iconBg="bg-emerald-500/10"
         />
@@ -260,17 +265,20 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle>Readiness Score</CardTitle>
+                <CardTitle>Revision Health</CardTitle>
                 <Sparkles className="h-4 w-4 text-indigo-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <ReadinessMeter
-                score={readinessScore}
-                physicsScore={physicsCompletion}
-                chemistryScore={chemistryCompletion}
-                mathScore={mathCompletion}
-              />
+              <div className="text-center py-6">
+  <div className="text-4xl font-bold text-emerald-400">
+    {revisionHealth}
+  </div>
+
+  <div className="text-sm text-zinc-400 mt-2">
+    Revision Health Score
+  </div>
+</div>
             </CardContent>
           </Card>
 
@@ -301,61 +309,62 @@ export default async function DashboardPage() {
             </Card>
           )}
 
-          {/* Recent mock tests */}
-          {mockStats.recent_tests.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-amber-400" />
-                    <CardTitle>Recent Tests</CardTitle>
-                  </div>
-                  <Link
-                    href="/mock-tests"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"
-                  >
-                    View all <ChevronRight className="h-3 w-3" />
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2.5">
-                  {mockStats.recent_tests.slice(0, 4).map((test) => (
-                    <div
-                      key={test.id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-zinc-300 truncate">
-                          {test.subject}
-                        </p>
-                        <p className="text-[10px] text-zinc-500">
-                          {formatDate(test.test_date)}
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p
-                          className={cn(
-                            "text-xs font-bold",
-                            ((test.score / test.total_marks) * 100) >= 70
-                              ? "text-emerald-400"
-                              : ((test.score / test.total_marks) * 100) >= 50
-                              ? "text-amber-400"
-                              : "text-red-400"
-                          )}
-                        >
-                          {Math.round((test.score / test.total_marks) * 100)}%
-                        </p>
-                        <p className="text-[10px] text-zinc-500">
-                          {test.score}/{test.total_marks}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+         {/* Mock Analytics */}
+<Card>
+  <CardHeader className="pb-3">
+    <div className="flex items-center gap-2">
+      <Trophy className="h-4 w-4 text-amber-400" />
+      <CardTitle>Mock Analytics</CardTitle>
+    </div>
+  </CardHeader>
+
+  <CardContent>
+    <div className="space-y-3">
+
+      <div className="flex justify-between text-sm">
+        <span className="text-zinc-400">Full Mock Count</span>
+        <span className="font-semibold">
+          {mockStats.full_mock_count}
+        </span>
+      </div>
+<div className="flex justify-between text-sm">
+  <span className="text-zinc-400">Best Full Mock</span>
+  <span className="font-semibold">
+    {mockStats.best_score}/300
+  </span>
+</div>
+      <div className="flex justify-between text-sm">
+        <span className="text-zinc-400">Last 5 Full Mock Avg</span>
+        <span className="font-semibold">
+          {mockStats.last5_full_mock_average}/300
+        </span>
+      </div>
+
+      <div className="flex justify-between text-sm">
+        <span className="text-zinc-400">Confidence</span>
+        <span
+          className={cn(
+            "font-semibold",
+            mockStats.confidence === "High"
+              ? "text-emerald-400"
+              : mockStats.confidence === "Medium"
+              ? "text-amber-400"
+              : "text-red-400"
           )}
+        >
+          {mockStats.confidence}
+        </span>
+      </div>
+
+      {mockStats.full_mock_count < 3 && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
+          Upload minimum 3 full syllabus mocks for better prediction.
+        </div>
+      )}
+
+    </div>
+  </CardContent>
+</Card>
 
           {/* Strong chapters */}
           {overallProgress.strongest_chapters.length > 0 && (
